@@ -8,27 +8,6 @@ import psycopg2
 import sys
 import xml.etree.ElementTree as ET
 
-# From http://stackoverflow.com/questions/1953761/accessing-xmlns-attribute-with-python-elementree
-#
-def parse_and_get_ns(file):
-    events = "start", "start-ns"
-    root = None
-    ns = {}
-    for event, elem in ET.iterparse(file, events):
-        if event == "start-ns":
-            # if elem[0] in ns and ns[elem[0]] != elem[1]:
-            # NOTE: It is perfectly valid to have the same prefix refer
-            #     to different URI namespaces in different parts of the
-            #     document. This exception serves as a reminder that this
-            #     solution is not robust.    Use at your own peril.
-            # raise KeyError("Duplicate prefix with different URI found.")
-            if len(elem[0]) > 0:
-                ns[elem[0]] = "%s" % elem[1]
-        elif event == "start":
-            if root is None:
-                root = elem
-    return ET.ElementTree(root), ns
-
 
 def extractNamespace(key, namespaceDict):
     nsValue = namespaceDict[key]
@@ -38,25 +17,17 @@ def extractNamespace(key, namespaceDict):
 
     return nsValue
 
+
 def parseFiling(inputFilename):
-
-    XBRLroot, namespaceDict = parse_and_get_ns(inputFilename)
-
-    pp = pprint.PrettyPrinter(indent = 4)
-    print("Got XBRLroot "+str(XBRLroot)+"\nNamespaces:")
-    pp.pprint(namespaceDict)
-
-    # Generally Accepted Accounting Practices
-    usGAAPns = extractNamespace('us-gaap', namespaceDict)
-
-    # Document and Entity Information
-    DEIns = extractNamespace('dei', namespaceDict)
 
     contextID = None
     ContextDataDict = {}
-    events = "start", "start-ns", "end"
-    root = None
+    events = "start", "start-ns", "end", "end-ns"
+    XBRLroot = None
     namespaceDict = {}
+
+    usGAAPns = None
+    DEIns = None
 
     for event, elem in ET.iterparse(inputFilename, events):
         if event == "start-ns":
@@ -71,11 +42,24 @@ def parseFiling(inputFilename):
             if len(elem[0]) > 0:
                 namespaceDict[elem[0]] = elem[1]
 
+        elif event == "end-ns":
+            print("Got end-ns element "+str(elem))
+
         elif event == "start":
             tag = elem.tag
 
-            if root is None:
-                root = elem
+            if XBRLroot is None:
+                XBRLroot = elem
+
+                pp = pprint.PrettyPrinter(indent = 4)
+                print("Got XBRLroot "+str(XBRLroot)+"\nNamespaces:")
+                pp.pprint(namespaceDict)
+
+                # Generally Accepted Accounting Practices
+                usGAAPns = extractNamespace('us-gaap', namespaceDict)
+
+                # Document and Entity Information
+                DEIns = extractNamespace('dei', namespaceDict)
 
             if "context" in tag:
                 contextID = elem.get('id')
@@ -83,6 +67,9 @@ def parseFiling(inputFilename):
 
         elif event == "end":
             tag = elem.tag
+
+            if not usGAAPns:
+                print("Pre-namespace tag is "+tag)
             if usGAAPns in tag:
                 GAAPterm = tag.replace('{'+usGAAPns+'}', '', 1)
                 GAAPtext = elem.text
@@ -123,6 +110,7 @@ def parseFiling(inputFilename):
                 else:
                     print(OtherTerm + " has no text")
     print("Context dict of data dicts has " + str(ContextDataDict))
+
 
 def main():
     if len(sys.argv) < 2:
