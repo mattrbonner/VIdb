@@ -6,8 +6,20 @@
 import pprint
 import psycopg2
 import sys
+import time
 import xml.etree.ElementTree as ET
 
+
+class Form10Data:
+    """This class holds the parsed data from a form 10 filing."""
+    CIK = 0
+    FilingData = {}
+    periodStart = time.gmtime(0) 
+    periodEnd = time.gmtime(0) 
+
+    def __init__(self, periodStart, periodEnd):
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
 
 def extractNamespace(key, namespaceDict):
     nsValue = namespaceDict[key]
@@ -64,6 +76,23 @@ def parseFiling(inputFilename):
             if "context" in tag:
                 contextID = elem.get('id')
                 print("Found context start "+tag+" id "+contextID)
+                contextIter = elem.iter()
+                print("Iterating over context elements")
+                for contextElement in contextIter:
+                    print("Found context element ", str(contextElement))
+                    if "period" in contextElement.tag:
+                        print("Iterating over period elements")
+                        periodIter = contextElement.iter()
+                        for periodElement in periodIter:
+                            print("Found period element ", str(periodElement))
+                            if "startDate" in periodElement.tag:
+                                startDateString = periodElement.text
+                                startDate = time.strptime(startDateString, "%Y-%m-%d")
+                                print("Found start date string " + startDateString + " converted to " + str(startDate))
+                            elif "endDate" in periodElement.tag:
+                                endDateString = periodElement.text
+                                endDate = time.strptime(endDateString, "%Y-%m-%d")
+                                print("Found end date string " + endDateString + " converted to " + str(endDate))
 
         elif event == "end":
             tag = elem.tag
