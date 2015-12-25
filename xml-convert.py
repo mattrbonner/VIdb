@@ -93,29 +93,45 @@ def parseFiling(inputFilename):
                 DEIns = extractNamespace('dei', namespaceDict)
 
             if "context" in tag:
+                startDate = time.gmtime(0)
+                endDate = time.gmtime(0)
+
                 contextID = elem.get('id')
                 print("Found context start "+tag+" id "+contextID)
                 contextIter = elem.iter()
-                print("Iterating over context elements")
+                print("    Iterating over context elements")
                 for contextElement in contextIter:
-                    print("Found context element ", str(contextElement))
+                    # print("\tFound context element ", str(contextElement))
                     if "period" in contextElement.tag:
-                        print("Iterating over period elements")
+                        print("    Iterating over period elements")
                         periodIter = contextElement.iter()
-                        startDate = time.gmtime(0)
-                        endDate = time.gmtime(0)
                         for periodElement in periodIter:
-                            print("Found period element ", str(periodElement))
+                            # print("\tFound period element ", str(periodElement))
                             if "startDate" in periodElement.tag:
                                 startDateString = periodElement.text
                                 startDate = time.strptime(startDateString, "%Y-%m-%d")
-                                print("Found start date string " + startDateString + " converted to " + str(startDate))
+                                # print("\tFound start date string " + startDateString + " converted to time.struct_time")
                             elif "endDate" in periodElement.tag:
                                 endDateString = periodElement.text
                                 endDate = time.strptime(endDateString, "%Y-%m-%d")
-                                print("Found end date string " + endDateString + " converted to " + str(endDate))
-                        c = DateContext(startDate, endDate)
-                        DateContextDict[contextID] = c
+                                # print("\tFound end date string " + endDateString + " converted to time.struct_time")
+                    if "entity" in contextElement.tag:
+                        print("    Iterating over entity elements")
+                        identityIter = contextElement.iter()
+                        for identityElement in identityIter:
+                            # print("\tFound identity element ", str(identityElement))
+                            if "identifier" in identityElement.tag:
+                                contextCIK = int(identityElement.text)
+                                print("\tFound CIK " + str(contextCIK))
+
+                if contextCIK == CIK:
+                    print("Adding context for period " + time.strftime("%Y-%m-%d", startDate) + " to " + time.strftime("%Y-%m-%d", endDate))
+                    c = DateContext(startDate, endDate)
+                    # Add an entry for this context ID and time period
+                    DateContextDict[contextID] = c
+                else:
+                    print("Skipping totes bogus context")
+
         elif event == "end":
             tag = elem.tag
 
@@ -146,7 +162,7 @@ def parseFiling(inputFilename):
                         CIK = int(DEItext)
                         print("Found central index key " + DEItext + " converted to int " + str(CIK))
                     elif DEIterm == "DocumentPeriodEndDate":
-                        EndDate = time.strptime(startDateString, "%Y-%m-%d")
+                        EndDate = time.strptime(DEItext, "%Y-%m-%d")
                         print("Found document period end date " + str(EndDate))
                     else:
                         if len(DEItext) > 100:
@@ -167,7 +183,9 @@ def parseFiling(inputFilename):
                     print("Other term " + OtherTerm + " text '" + OtherText + "'")
                 else:
                     print(OtherTerm + " has no text")
-    print("Context dict of data dicts has " + str(ContextDataDict))
+    print("Context dict of data dicts has "+str(len(ContextDataDict))+" dictionaries")
+    pp = pprint.PrettyPrinter(indent = 4)
+    pp.pprint(ContextDataDict)
 
 
 def main():
