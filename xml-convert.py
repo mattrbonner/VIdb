@@ -1,18 +1,21 @@
 #!/usr/bin/env python
 #
-# Testing the idea from:
-# http://stackoverflow.com/questions/17799790/using-xpath-to-extract-data-from-an-xml-column-in-postgres
+# Parse an XBRL file and store the interesting data to data structures.
 #
 import pprint
 import psycopg2
 import sys
-import time
+from datetime import datetime
 import xml.etree.ElementTree as ET
+
+gVerbose = False
+
 
 class DateContext:
     def __init__(self, periodStart, periodEnd):
         self.periodStart = periodStart
         self.periodEnd = periodEnd
+
 
 class Form10Data:
     """This class holds the parsed data from a form 10 filing."""
@@ -26,6 +29,12 @@ class Form10Data:
     def setData(data):
         self.FilingData = data
 
+
+def verbose(text):
+    if gVerbose:
+        print(text)
+
+
 def extractNamespace(key, namespaceDict):
     nsValue = namespaceDict[key]
 
@@ -34,6 +43,8 @@ def extractNamespace(key, namespaceDict):
 
     return nsValue
 
+
+toDateStr = lambda d : d.strftime("%Y-%m-%d")
 
 def parseFiling(inputFilename):
     CIK = 0
@@ -46,6 +57,9 @@ def parseFiling(inputFilename):
 
     # DateContextDict should have keys of type context ID and values of type DateContext
     DateContextDict = {}
+
+    # DEIDict should have keys of type string that are the tag names and values of type string that are the text of the tag.
+    DEIDict = {}
 
     # The end date is the DEI namespace end date. Use this to filter for current period data
     EndDate = None
@@ -72,10 +86,9 @@ def parseFiling(inputFilename):
 
             if len(elem[0]) > 0:
                 namespaceDict[elem[0]] = elem[1]
-
         elif event == "end-ns":
-            print("Got end-ns element "+str(elem))
-
+            verbose("Got end-ns element "+str(elem))
+            pass
         elif event == "start":
             tag = elem.tag
 
@@ -93,50 +106,14 @@ def parseFiling(inputFilename):
                 DEIns = extractNamespace('dei', namespaceDict)
 
             if "context" in tag:
-                startDate = time.gmtime(0)
-                endDate = time.gmtime(0)
-
                 contextID = elem.get('id')
-                print("Found context start "+tag+" id "+contextID)
-                contextIter = elem.iter()
-                print("    Iterating over context elements")
-                for contextElement in contextIter:
-                    # print("\tFound context element ", str(contextElement))
-                    if "period" in contextElement.tag:
-                        print("    Iterating over period elements")
-                        periodIter = contextElement.iter()
-                        for periodElement in periodIter:
-                            # print("\tFound period element ", str(periodElement))
-                            if "startDate" in periodElement.tag:
-                                startDateString = periodElement.text
-                                startDate = time.strptime(startDateString, "%Y-%m-%d")
-                                # print("\tFound start date string " + startDateString + " converted to time.struct_time")
-                            elif "endDate" in periodElement.tag:
-                                endDateString = periodElement.text
-                                endDate = time.strptime(endDateString, "%Y-%m-%d")
-                                # print("\tFound end date string " + endDateString + " converted to time.struct_time")
-                    if "entity" in contextElement.tag:
-                        print("    Iterating over entity elements")
-                        identityIter = contextElement.iter()
-                        for identityElement in identityIter:
-                            # print("\tFound identity element ", str(identityElement))
-                            if "identifier" in identityElement.tag:
-                                contextCIK = int(identityElement.text)
-                                print("\tFound CIK " + str(contextCIK))
-
-                if contextCIK == CIK:
-                    print("Adding context for period " + time.strftime("%Y-%m-%d", startDate) + " to " + time.strftime("%Y-%m-%d", endDate))
-                    c = DateContext(startDate, endDate)
-                    # Add an entry for this context ID and time period
-                    DateContextDict[contextID] = c
-                else:
-                    print("Skipping totes bogus context")
+                verbose("Found context start "+tag+" id "+contextID)
 
         elif event == "end":
             tag = elem.tag
 
             if not usGAAPns:
-                print("Pre-namespace tag is "+tag)
+                verbose("Pre-namespace tag is "+tag)
             if usGAAPns in tag:
                 GAAPterm = tag.replace('{'+usGAAPns+'}', '', 1)
                 GAAPtext = elem.text
@@ -150,42 +127,112 @@ def parseFiling(inputFilename):
                     else:
                         dataDict = {}
                         ContextDataDict[GAAPContextRef] = dataDict
-                    print("GAAP term " + GAAPterm + " " + GAAPtext + "\n\tcontextRef " + GAAPContextRef)
+                    verbose("GAAP term " + GAAPterm + " " + GAAPtext)
                     dataDict[GAAPterm] = GAAPtext
                 else:
-                    print(GAAPterm + " has no text")
+                    verbose(GAAPterm + " has no text")
             elif DEIns in tag:
                 DEIterm = tag.replace('{'+DEIns+'}', '', 1)
                 DEItext = elem.text
                 if DEItext != None:
+                    DEIDict[DEIterm] = DEItext
                     if DEIterm == "EntityCentralIndexKey":
                         CIK = int(DEItext)
                         print("Found central index key " + DEItext + " converted to int " + str(CIK))
                     elif DEIterm == "DocumentPeriodEndDate":
-                        EndDate = time.strptime(DEItext, "%Y-%m-%d")
-                        print("Found document period end date " + str(EndDate))
+                        EndDate = datetime.strptime(DEItext, "%Y-%m-%d")
+                        print("Found document period end date " + toDateStr(EndDate))
                     else:
                         if len(DEItext) > 100:
                             DEItext = DEItext[0:100] + "...\n"
-                        print("DEI term " + DEIterm + " " + DEItext)
+                        verbose("DEI term " + DEIterm + " " + DEItext)
                 else:
                     print(DEIterm + " has no text")
             elif "context" in tag:
-                print("Found context end "+tag)
+                verbose("Found context end "+tag)
+                isValidPeriod = False
+                startDate = None
+                endDate = None
+
+                contextIter = elem.iter()
+                verbose("    Iterating over context elements")
+                for contextElement in contextIter:
+                    verbose("\tFound context element " + str(contextElement))
+                    if "period" in contextElement.tag:
+                        verbose("    Iterating over period elements")
+                        periodIter = contextElement.iter()
+                        for periodElement in periodIter:
+                            verbose("\tFound period element " + str(periodElement))
+                            if "startDate" in periodElement.tag:
+                                startDateString = periodElement.text
+                                startDate = datetime.strptime(startDateString, "%Y-%m-%d")
+                                verbose("\tFound start date string " + startDateString + " converted to time.struct_time")
+                            elif "endDate" in periodElement.tag:
+                                endDateString = periodElement.text
+                                endDate = datetime.strptime(endDateString, "%Y-%m-%d")
+                                verbose("\tFound end date string " + endDateString + " converted to time.struct_time")
+                                if startDate:
+                                    isValidPeriod = True
+                    if "entity" in contextElement.tag:
+                        verbose("    Iterating over entity elements")
+                        identityIter = contextElement.iter()
+                        for identityElement in identityIter:
+                            verbose("\tFound identity element " + str(identityElement))
+                            if "identifier" in identityElement.tag:
+                                contextCIK = int(identityElement.text)
+                                verbose("\tFound CIK " + str(contextCIK))
+
+                if contextCIK == CIK and isValidPeriod:
+                    verbose("Adding context for period " + toDateStr(startDate) + " to " + toDateStr(endDate))
+                    c = DateContext(startDate, endDate)
+                    # Add an entry for this context ID and time period
+                    DateContextDict[contextID] = c
+                else:
+                    verbose("Skipping totes bogus context")
                 contextID = None
             else:
                 OtherTerm = tag
                 OtherText = elem.text or ""
                 OtherText = OtherText.strip()
-                if len(OtherText) > 0:
+                """if len(OtherText) > 0:
                     if len(OtherText) > 100:
                        OtherText = OtherText[0:100] + "..."
-                    print("Other term " + OtherTerm + " text '" + OtherText + "'")
+                    verbose("Other term " + OtherTerm + " text '" + OtherText + "'")
                 else:
                     print(OtherTerm + " has no text")
+                    pass"""
+
+    pp = pprint.PrettyPrinter(indent = 2)
+    print("DEI dictionary has:")
+    pp.pprint(DEIDict)
     print("Context dict of data dicts has "+str(len(ContextDataDict))+" dictionaries")
-    pp = pprint.PrettyPrinter(indent = 4)
-    pp.pprint(ContextDataDict)
+    # pp.pprint(ContextDataDict)
+
+    InterestingContexts = []
+
+    for Context, ContextDict in ContextDataDict.items():
+        try:
+            if ContextDict['NetIncomeLoss'] != None:
+                InterestingContexts.append(Context)
+        except KeyError:
+            pass
+
+    docEndDateStr = DEIDict['DocumentPeriodEndDate']
+    print("Statement period end date " + docEndDateStr)
+
+    isVeryInteresting = False
+    for ic in InterestingContexts:
+        isVeryInteresting = False
+        dateStr = toDateStr(DateContextDict[ic].periodEnd)
+        print("Interesting context: " + ic + " " + dateStr)
+        if dateStr == docEndDateStr:
+            isVeryInteresting = True
+            print("\t(This one is especially interesting.)")
+        periodLength = DateContextDict[ic].periodEnd - DateContextDict[ic].periodStart
+        print("\tPeriod of this context is " + str(periodLength.days) + " days")
+        if isVeryInteresting and periodLength.days == 90:
+            print("Most interesting context:")
+            pp.pprint(ContextDataDict[ic])
 
 
 def main():
