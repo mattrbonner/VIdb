@@ -9,17 +9,22 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
-
-class Form10Data:
-    """This class holds the parsed data from a form 10 filing."""
-    CIK = 0
-    FilingData = {}
-    periodStart = time.gmtime(0) 
-    periodEnd = time.gmtime(0) 
-
+class DateContext:
     def __init__(self, periodStart, periodEnd):
         self.periodStart = periodStart
         self.periodEnd = periodEnd
+
+class Form10Data:
+    """This class holds the parsed data from a form 10 filing."""
+    FilingData = {}
+
+    def __init__(self, periodStart, periodEnd, CIK):
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
+        self.CIK = CIK
+
+    def setData(data):
+        self.FilingData = data
 
 def extractNamespace(key, namespaceDict):
     nsValue = namespaceDict[key]
@@ -31,11 +36,25 @@ def extractNamespace(key, namespaceDict):
 
 
 def parseFiling(inputFilename):
-
+    CIK = 0
     contextID = None
+
+    # ContextDataDict should have keys of type context ID and values that are themselves
+    # dictionaries with keys matching GAAP XBLR terms and values of type string containing
+    # the value for the GAAP term
     ContextDataDict = {}
+
+    # DateContextDict should have keys of type context ID and values of type DateContext
+    DateContextDict = {}
+
+    # The end date is the DEI namespace end date. Use this to filter for current period data
+    EndDate = None
+
     events = "start", "start-ns", "end", "end-ns"
     XBRLroot = None
+
+    # namespaceDict should have keys of type string that are namespace names and values
+    # of type string that are the URI's for the corresponding name
     namespaceDict = {}
 
     usGAAPns = None
@@ -83,6 +102,8 @@ def parseFiling(inputFilename):
                     if "period" in contextElement.tag:
                         print("Iterating over period elements")
                         periodIter = contextElement.iter()
+                        startDate = time.gmtime(0)
+                        endDate = time.gmtime(0)
                         for periodElement in periodIter:
                             print("Found period element ", str(periodElement))
                             if "startDate" in periodElement.tag:
@@ -93,7 +114,8 @@ def parseFiling(inputFilename):
                                 endDateString = periodElement.text
                                 endDate = time.strptime(endDateString, "%Y-%m-%d")
                                 print("Found end date string " + endDateString + " converted to " + str(endDate))
-
+                        c = DateContext(startDate, endDate)
+                        DateContextDict[contextID] = c
         elif event == "end":
             tag = elem.tag
 
@@ -112,7 +134,7 @@ def parseFiling(inputFilename):
                     else:
                         dataDict = {}
                         ContextDataDict[GAAPContextRef] = dataDict
-                    print("GAAP term " + GAAPterm + " " + GAAPtext + " contextRef " + GAAPContextRef)
+                    print("GAAP term " + GAAPterm + " " + GAAPtext + "\n\tcontextRef " + GAAPContextRef)
                     dataDict[GAAPterm] = GAAPtext
                 else:
                     print(GAAPterm + " has no text")
@@ -120,9 +142,16 @@ def parseFiling(inputFilename):
                 DEIterm = tag.replace('{'+DEIns+'}', '', 1)
                 DEItext = elem.text
                 if DEItext != None:
-                    if len(DEItext) > 100:
-                       DEItext = DEItext[0:100] + "..."
-                    print("DEI term " + DEIterm + " " + DEItext)
+                    if DEIterm == "EntityCentralIndexKey":
+                        CIK = int(DEItext)
+                        print("Found central index key " + DEItext + " converted to int " + str(CIK))
+                    elif DEIterm == "DocumentPeriodEndDate":
+                        EndDate = time.strptime(startDateString, "%Y-%m-%d")
+                        print("Found document period end date " + str(EndDate))
+                    else:
+                        if len(DEItext) > 100:
+                            DEItext = DEItext[0:100] + "...\n"
+                        print("DEI term " + DEIterm + " " + DEItext)
                 else:
                     print(DEIterm + " has no text")
             elif "context" in tag:
