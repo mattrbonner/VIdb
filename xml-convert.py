@@ -138,7 +138,7 @@ def parseFiling(inputFilename):
                     DEIDict[DEIterm] = DEItext
                     if DEIterm == "EntityCentralIndexKey":
                         CIK = int(DEItext)
-                        print("Found central index key " + DEItext + " converted to int " + str(CIK))
+                        verbose("Found central index key " + DEItext + " converted to int " + str(CIK))
                     elif DEIterm == "DocumentPeriodEndDate":
                         EndDate = datetime.strptime(DEItext, "%Y-%m-%d")
                         print("Found document period end date " + toDateStr(EndDate))
@@ -199,12 +199,15 @@ def parseFiling(inputFilename):
                        OtherText = OtherText[0:100] + "..."
                     verbose("Other term " + OtherTerm + " text '" + OtherText + "'")
                 else:
-                    print(OtherTerm + " has no text")
+                    verbose(OtherTerm + " has no text")
                     pass"""
 
+    # For now, log the contents of the DEI dictionary
     pp = pprint.PrettyPrinter(indent = 2)
     print("DEI dictionary has:")
     pp.pprint(DEIDict)
+
+    # Here's where you can log the contents of all the US GAAP dictionaries as a function of their context ref
     print("Context dict of data dicts has "+str(len(ContextDataDict))+" dictionaries")
     # pp.pprint(ContextDataDict)
 
@@ -220,19 +223,32 @@ def parseFiling(inputFilename):
     docEndDateStr = DEIDict['DocumentPeriodEndDate']
     print("Statement period end date " + docEndDateStr)
 
-    isVeryInteresting = False
+    docType = DEIDict['DocumentType']
+    print("Statement type " + docType)
+
+    periodMin = 0
+    periodMax = 0
+    if docType == '10-K':
+        periodMin = 360
+        periodMax = 369
+    elif docType == '10-Q':
+        periodMin = 89
+        periodMax = 96
+    else:
+        print('What the what with document type ' + docType)
+
     for ic in InterestingContexts:
-        isVeryInteresting = False
         dateStr = toDateStr(DateContextDict[ic].periodEnd)
-        print("Interesting context: " + ic + " " + dateStr)
+        print("Context containing a NetIncomeLoss entry: " + ic + " " + dateStr)
         if dateStr == docEndDateStr:
-            isVeryInteresting = True
-            print("\t(This one is especially interesting.)")
-        periodLength = DateContextDict[ic].periodEnd - DateContextDict[ic].periodStart
-        print("\tPeriod of this context is " + str(periodLength.days) + " days")
-        if isVeryInteresting and periodLength.days == 90:
-            print("Most interesting context:")
-            pp.pprint(ContextDataDict[ic])
+            print("\tThe period of this context ends on the same date as the statement.")
+            periodLength = DateContextDict[ic].periodEnd - DateContextDict[ic].periodStart
+            print("\tPeriod of this context is " + str(periodLength.days) + " days")
+            dataDict = ContextDataDict[ic]
+            if len(dataDict) > 15  and periodLength.days >= periodMin and periodLength.days <= periodMax:
+                print("\tThis data dictionary has " + str(len(dataDict)) + " entries")
+                print("Most interesting context:")
+                pp.pprint(dataDict)
 
 
 def main():
