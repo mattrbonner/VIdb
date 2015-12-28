@@ -180,7 +180,7 @@ def parseFiling(inputFilename):
                                 # the text containing the dei:DocumentPeriodEndDate
                                 instantDateString = periodElement.text
                                 endDate = datetime.strptime(instantDateString, "%Y-%m-%d")
-                                print("\tFound instant string " + instantDateString + " for context " + contextID)
+                                verbose("\tFound instant string " + instantDateString + " for context " + contextID)
                                 if endDate:
                                     isValidInstant = True
                     if "entity" in contextElement.tag:
@@ -200,7 +200,6 @@ def parseFiling(inputFilename):
                 elif contextCIK == CIK and isValidInstant:
                     if contextID == "eol_PE2035----1510-K0012_STD_0_20150926_0":
                         print("This should be the balance sheet context")
-                    print("Adding context for instant " + toDateStr(endDate))
                     c = DateContext(startDate, endDate)
                     # Add an entry for this context ID and time period
                     DateContextDict[contextID] = c
@@ -231,17 +230,8 @@ def parseFiling(inputFilename):
     InterestingContexts = []
 
     for Context, ContextDict in ContextDataDict.items():
-        try:
-            if ContextDict['NetIncomeLoss'] != None:
-                InterestingContexts.append(Context)
-        except KeyError:
-            try:
-                if ['CashAndCashEquivalentsAtCarryingValue'] != None:
-                    InterestingContexts.append(Context)
-                    if Context == "eol_PE2035----1510-K0012_STD_0_20150926_0":
-                        print("***We appended the interesting context for the balance sheet")
-            except KeyError:
-                pass
+        if ContextDict.get('NetIncomeLoss') != None or ContextDict.get('CashAndCashEquivalentsAtCarryingValue') != None:
+            InterestingContexts.append(Context)
 
     docEndDateStr = DEIDict['DocumentPeriodEndDate']
     print("Statement period end date " + docEndDateStr)
@@ -269,15 +259,15 @@ def parseFiling(inputFilename):
     for ic in InterestingContexts:
         dateContext = DateContextDict[ic]
         dateStr = toDateStr(dateContext.periodEnd)
-        print("Context containing an interesting entry: " + ic + " " + dateStr)
+        verbose("Context containing an interesting entry: " + ic + " " + dateStr)
         if ic == "eol_PE2035----1510-K0012_STD_0_20150926_0":
             print("This should be the balance sheet context")
         if dateStr == docEndDateStr:
-            print("\tThe period of this context ends on the same date as the statement.")
+            verbose("\tThe period of this context ends on the same date as the statement.")
             # Handle contexts with a date range:
             if dateContext.periodStart != None:
                 periodLength = dateContext.periodEnd - dateContext.periodStart
-                print("\tPeriod of this context is " + str(periodLength.days) + " days")
+                verbose("\tPeriod of this context is " + str(periodLength.days) + " days")
                 dataDict = ContextDataDict[ic]
                 if len(dataDict) > 15  and periodLength.days >= periodMin and periodLength.days <= periodMax:
                     print("\tThis range data dictionary has " + str(len(dataDict)) + " entries")
@@ -287,21 +277,21 @@ def parseFiling(inputFilename):
                     print("Most interesting date range context:")
                     pp.pprint(dataDict)
             else:
-                isPossibleBalanceSheet = False
-                try:
-                    isPossibleBalanceSheet = ContextDataDict[ic]['CashAndCashEquivalentsAtCarryingValue'] != None
-                except KeyError:
-                    pass
-                if isPossibleBalanceSheet:
+                dataDict = ContextDataDict[ic]
+                if dataDict.get('CashAndCashEquivalentsAtCarryingValue') != None:
                     # the start date is None, and the dictionary appears to have
                     # balance sheet data, so save it
-                    print("\tThis instant data dictionary has " + str(len(dataDict)) + " entries")
-                    if InstantContextData:
-                        print("*** We have already seen an interesting instant context")
-                    InstantContextData = dataDict
-                    print("Most interesting instant context:")
-                    pp.pprint(dataDict)
+                    if len(dataDict) > 15:
+                        if InstantContextData:
+                            print("*** We have already seen an interesting instant context")
 
+                        InstantContextData = dataDict
+                        print("\tMost instant data dictionary has " + str(len(dataDict)) + " entries")
+                        pp.pprint(InstantContextData)
+
+    print('\nProcessing complete\n')
+
+    return InstantContextData, DateRangeContextData
 
 def main():
     if len(sys.argv) < 2:
@@ -313,8 +303,7 @@ def main():
     # conn = psycopg2.connect(database="stocks_us", user="postgres", password="v3gBdD#VI")
     # cur = conn.cursor()
 
-    parseFiling(inputFilename)
-
+    balanceDict, incomeDict = parseFiling(inputFilename)
 
     # cur.close()
     # conn.close()
