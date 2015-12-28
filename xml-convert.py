@@ -13,6 +13,7 @@ gVerbose = False
 
 class DateContext:
     def __init__(self, periodStart, periodEnd):
+        # Note that periodStart may be None if the context's date range is "instant"
         self.periodStart = periodStart
         self.periodEnd = periodEnd
 
@@ -151,6 +152,7 @@ def parseFiling(inputFilename):
             elif "context" in tag:
                 verbose("Found context end "+tag)
                 isValidPeriod = False
+                isValidInstant = False
                 startDate = None
                 endDate = None
 
@@ -173,6 +175,14 @@ def parseFiling(inputFilename):
                                 verbose("\tFound end date string " + endDateString + " converted to time.struct_time")
                                 if startDate:
                                     isValidPeriod = True
+                            elif "instant" in periodElement.tag:
+                                # Filing data for the balance sheet all use an "instant" context with
+                                # the text containing the dei:DocumentPeriodEndDate
+                                instantDateString = periodElement.text
+                                endDate = datetime.strptime(instantDateString, "%Y-%m-%d")
+                                print("\tFound instant string " + instantDateString + " for context " + contextID)
+                                if endDate:
+                                    isValidInstant = True
                     if "entity" in contextElement.tag:
                         verbose("    Iterating over entity elements")
                         identityIter = contextElement.iter()
@@ -184,6 +194,13 @@ def parseFiling(inputFilename):
 
                 if contextCIK == CIK and isValidPeriod:
                     verbose("Adding context for period " + toDateStr(startDate) + " to " + toDateStr(endDate))
+                    c = DateContext(startDate, endDate)
+                    # Add an entry for this context ID and time period
+                    DateContextDict[contextID] = c
+                elif contextCIK == CIK and isValidInstant:
+                    if contextID == "eol_PE2035----1510-K0012_STD_0_20150926_0":
+                        print("This should be the balance sheet context")
+                    print("Adding context for instant " + toDateStr(endDate))
                     c = DateContext(startDate, endDate)
                     # Add an entry for this context ID and time period
                     DateContextDict[contextID] = c
@@ -218,7 +235,13 @@ def parseFiling(inputFilename):
             if ContextDict['NetIncomeLoss'] != None:
                 InterestingContexts.append(Context)
         except KeyError:
-            pass
+            try:
+                if ['CashAndCashEquivalentsAtCarryingValue'] != None:
+                    InterestingContexts.append(Context)
+                    if Context == "eol_PE2035----1510-K0012_STD_0_20150926_0":
+                        print("***We appended the interesting context for the balance sheet")
+            except KeyError:
+                pass
 
     docEndDateStr = DEIDict['DocumentPeriodEndDate']
     print("Statement period end date " + docEndDateStr)
@@ -237,18 +260,47 @@ def parseFiling(inputFilename):
     else:
         print('What the what with document type ' + docType)
 
+    # The income and cash flow data use a date range, while the balance sheet
+    # data use the instant of the end date of the statement. Save the relevant
+    # dictionaries for each
+    DateRangeContextData = None
+    InstantContextData = None
+
     for ic in InterestingContexts:
-        dateStr = toDateStr(DateContextDict[ic].periodEnd)
-        print("Context containing a NetIncomeLoss entry: " + ic + " " + dateStr)
+        dateContext = DateContextDict[ic]
+        dateStr = toDateStr(dateContext.periodEnd)
+        print("Context containing an interesting entry: " + ic + " " + dateStr)
+        if ic == "eol_PE2035----1510-K0012_STD_0_20150926_0":
+            print("This should be the balance sheet context")
         if dateStr == docEndDateStr:
             print("\tThe period of this context ends on the same date as the statement.")
-            periodLength = DateContextDict[ic].periodEnd - DateContextDict[ic].periodStart
-            print("\tPeriod of this context is " + str(periodLength.days) + " days")
-            dataDict = ContextDataDict[ic]
-            if len(dataDict) > 15  and periodLength.days >= periodMin and periodLength.days <= periodMax:
-                print("\tThis data dictionary has " + str(len(dataDict)) + " entries")
-                print("Most interesting context:")
-                pp.pprint(dataDict)
+            # Handle contexts with a date range:
+            if dateContext.periodStart != None:
+                periodLength = dateContext.periodEnd - dateContext.periodStart
+                print("\tPeriod of this context is " + str(periodLength.days) + " days")
+                dataDict = ContextDataDict[ic]
+                if len(dataDict) > 15  and periodLength.days >= periodMin and periodLength.days <= periodMax:
+                    print("\tThis range data dictionary has " + str(len(dataDict)) + " entries")
+                    if DateRangeContextData:
+                        print("*** We have already seen an interesting date range context")
+                    DateRangeContextData = dataDict
+                    print("Most interesting date range context:")
+                    pp.pprint(dataDict)
+            else:
+                isPossibleBalanceSheet = False
+                try:
+                    isPossibleBalanceSheet = ContextDataDict[ic]['CashAndCashEquivalentsAtCarryingValue'] != None
+                except KeyError:
+                    pass
+                if isPossibleBalanceSheet:
+                    # the start date is None, and the dictionary appears to have
+                    # balance sheet data, so save it
+                    print("\tThis instant data dictionary has " + str(len(dataDict)) + " entries")
+                    if InstantContextData:
+                        print("*** We have already seen an interesting instant context")
+                    InstantContextData = dataDict
+                    print("Most interesting instant context:")
+                    pp.pprint(dataDict)
 
 
 def main():
