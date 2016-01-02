@@ -29,6 +29,8 @@ cur.execute("SET default_tablespace = '';")
 
 cur.execute("SET default_with_oids = false;")
 
+cur.execute('DROP TABLE cik_financials')
+
 #
 # Name: cik_financials; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 #
@@ -78,8 +80,39 @@ cur.execute('CREATE TABLE cik_financials (cik integer NOT NULL, \
     "RetainedEarningsAccumulatedDeficit" integer, \
     "AccumulatedOtherComprehensiveIncomeLossNetOfTax" integer, \
     "StockholdersEquity" integer, \
-    "LiabilitiesAndStockholdersEquity" integer)');
+    "LiabilitiesAndStockholdersEquity" integer, \
+    "DepreciationAmortizationAndAccretionNet" integer, \
+    "ShareBasedCompensation" integer, \
+    "DeferredIncomeTaxExpenseBenefit" integer, \
+    "IncreaseDecreaseInAccountsReceivable" integer, \
+    "IncreaseDecreaseInInventories" integer, \
+    "IncreaseDecreaseInOtherOperatingAssets" integer, \
+    "IncreaseDecreaseInAccountsPayable" integer, \
+    "IncreaseDecreaseInDeferredRevenue" integer, \
+    "IncreaseDecreaseInOtherOperatingLiabilities" integer, \
+    "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations" integer, \
+    "PaymentsToAcquireAvailableForSaleSecurities" integer, \
+    "ProceedsFromMaturitiesPrepaymentsAndCallsOfAvailableForSaleSecurities" integer, \
+    "ProceedsFromSaleOfAvailableForSaleSecurities" integer, \
+    "PaymentsToAcquireBusinessesNetOfCashAcquired" integer, \
+    "PaymentsToAcquirePropertyPlantAndEquipment" integer, \
+    "PaymentsToAcquireIntangibleAssets" integer, \
+    "PaymentsForProceedsFromOtherInvestingActivities" integer, \
+    "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations" integer, \
+    "ProceedsFromIssuanceOfCommonStock" integer, \
+    "ExcessTaxBenefitFromShareBasedCompensationFinancingActivities" integer, \
+    "PaymentsRelatedToTaxWithholdingForShareBasedCompensation" integer, \
+    "PaymentsForRepurchaseOfCommonStock" integer, \
+    "ProceedsFromIssuanceOfLongTermDebt" integer, \
+    "ProceedsFromRepaymentsOfCommercialPaper" integer, \
+    "NetCashProvidedByUsedInFinancingActivitiesContinuingOperations" integer, \
+    "CashAndCashEquivalentsPeriodIncreaseDecrease" integer \
+    )');
 
+
+# Shown in AAPL statement, but not GAAP:
+#   <aapl:IncreaseDecreaseInNonTradeReceivables contextRef="eol_PE2035----1510-K0012_STD_364_20150926_0" unitRef="iso4217_USD" decimals="-6" id="id_5290686_88BDB078-95B3-493E-8A8D-33F52EB05AD7_1_10">3735000000</aapl:IncreaseDecreaseInNonTradeReceivables>
+#   <aapl:PaymentsOfDividendsAndDividendEquivalentsOnCommonStockAndRestrictedStockUnits contextRef="eol_PE2035----1510-K0012_STD_364_20150926_0" unitRef="iso4217_USD" decimals="-6" id="id_5290686_88BDB078-95B3-493E-8A8D-33F52EB05AD7_1_29">11561000000</aapl:PaymentsOfDividendsAndDividendEquivalentsOnCommonStockAndRestrictedStockUnits>
 
 cur.execute('ALTER TABLE public.cik_financials OWNER TO postgres;')
 
@@ -96,14 +129,22 @@ cur.execute("COMMENT ON COLUMN cik_financials.\"Assets\" IS 'Total assets';")
 cur.execute("COMMENT ON COLUMN cik_financials.\"LongTermDebtCurrent\" IS 'Current portion of long-term debt';")
 cur.execute("COMMENT ON COLUMN cik_financials.\"Liabilities\" IS 'Total liabilities';")
 cur.execute("COMMENT ON COLUMN cik_financials.\"LiabilitiesAndStockholdersEquity\" IS 'Total liabilities and shareholders’ equity--last entry in balance sheet';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"DepreciationAmortizationAndAccretionNet\" IS 'first column of cash flow statement';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"IncreaseDecreaseInAccountsReceivable\" IS 'Accounts receivable, net';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"IncreaseDecreaseInOtherOperatingAssets\" IS 'Other current and non-current assets';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"NetCashProvidedByUsedInOperatingActivitiesContinuingOperations\" IS 'Last entry for operating activities';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"PaymentsToAcquireAvailableForSaleSecurities\" IS 'First entry for investing activities';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"NetCashProvidedByUsedInInvestingActivitiesContinuingOperations\" IS 'Last entry for investing activities';")
+cur.execute("COMMENT ON COLUMN cik_financials.\"ProceedsFromIssuanceOfCommonStock\" IS 'First entry for financing activities';")
 
+
+# TODO: what good is this? Why does pgdump emit it?
 cur.execute("CREATE SEQUENCE cik_financials_cik_seq START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;")
-
 cur.execute("ALTER TABLE public.cik_financials_cik_seq OWNER TO postgres;")
 cur.execute("ALTER SEQUENCE cik_financials_cik_seq OWNED BY cik_financials.cik;")
 
 # cur.execute("CREATE TABLE ticker_cik ( ticker character varying(8) NOT NULL, cik integer);")
-cur.execute("ALTER TABLE public.ticker_cik OWNER TO postgres;")
+# cur.execute("ALTER TABLE public.ticker_cik OWNER TO postgres;")
 
 cur.execute("ALTER TABLE ONLY cik_financials ADD CONSTRAINT cik_financials_pkey PRIMARY KEY (cik);")
 # cur.execute("ALTER TABLE ONLY cik_form10xml ADD CONSTRAINT cik_form10xml_pkey PRIMARY KEY (accession);")
