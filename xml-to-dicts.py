@@ -308,15 +308,9 @@ def main():
 
     inputFilename = sys.argv[1]
 
-    # conn = psycopg2.connect(database="stocks_us", user="postgres", password="v3gBdD#VI")
-    # cur = conn.cursor()
-
     xbrlParser = XBRLParser(inputFilename)
 
     balanceDict, incomeDict = xbrlParser.parseFiling()
-
-    # cur.close()
-    # conn.close()
 
 
 if __name__ == "__main__":
