@@ -264,37 +264,40 @@ class XBRLParser:
         InstantContextData = None
 
         for ic in InterestingContexts:
-            dateContext = DateContextDict[ic]
-            dateStr = self.toDateStr(dateContext.periodEnd)
-            verbose("Context containing an interesting entry: " + ic + " " + dateStr)
             if ic == "eol_PE2035----1510-K0012_STD_0_20150926_0":
                 print("This should be the balance sheet context")
-            if dateStr == docEndDateStr:
-                verbose("\tThe period of this context ends on the same date as the statement.")
-                # Handle contexts with a date range:
-                if dateContext.periodStart != None:
-                    periodLength = dateContext.periodEnd - dateContext.periodStart
-                    verbose("\tPeriod of this context is " + str(periodLength.days) + " days")
-                    dataDict = ContextDataDict[ic]
-                    if len(dataDict) > 15  and periodLength.days >= periodMin and periodLength.days <= periodMax:
-                        print("\tThis range data dictionary has " + str(len(dataDict)) + " entries")
-                        if DateRangeContextData:
-                            print("*** We have already seen an interesting date range context")
-                        DateRangeContextData = dataDict
-                        print("Most interesting date range context:")
-                        pp.pprint(dataDict)
-                else:
-                    dataDict = ContextDataDict[ic]
-                    if dataDict.get('CashAndCashEquivalentsAtCarryingValue') != None:
-                        # the start date is None, and the dictionary appears to have
-                        # balance sheet data, so save it
-                        if len(dataDict) > 15:
-                            if InstantContextData:
-                                print("*** We have already seen an interesting instant context")
 
-                            InstantContextData = dataDict
-                            print("\tMost instant data dictionary has " + str(len(dataDict)) + " entries")
-                            pp.pprint(InstantContextData)
+            # Check that this key even has a date context. Some don't.
+            if ic in DateContextDict:
+                dateContext = DateContextDict[ic]
+                dateStr = self.toDateStr(dateContext.periodEnd)
+                verbose("Context containing an interesting entry: " + ic + " " + dateStr)
+                if dateStr == docEndDateStr:
+                    verbose("\tThe period of this context ends on the same date as the statement.")
+                    # Handle contexts with a date range:
+                    if dateContext.periodStart != None:
+                        periodLength = dateContext.periodEnd - dateContext.periodStart
+                        verbose("\tPeriod of this context is " + str(periodLength.days) + " days")
+                        dataDict = ContextDataDict[ic]
+                        if len(dataDict) > 15  and periodLength.days >= periodMin and periodLength.days <= periodMax:
+                            print("\tThis range data dictionary has " + str(len(dataDict)) + " entries")
+                            if DateRangeContextData:
+                                print("*** We have already seen an interesting date range context")
+                            DateRangeContextData = dataDict
+                            print("Most interesting date range context:")
+                            pp.pprint(dataDict)
+                    else:
+                        dataDict = ContextDataDict[ic]
+                        if dataDict.get('CashAndCashEquivalentsAtCarryingValue') != None:
+                            # the start date is None, and the dictionary appears to have
+                            # balance sheet data, so save it
+                            if len(dataDict) > 15:
+                                if InstantContextData:
+                                    print("*** We have already seen an interesting instant context")
+
+                                InstantContextData = dataDict
+                                print("\tMost instant data dictionary has " + str(len(dataDict)) + " entries")
+                                pp.pprint(InstantContextData)
 
         print('\nProcessing complete\n')
 
